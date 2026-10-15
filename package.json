@@ -1,0 +1,14 @@
+{
+  "name": "researchmind-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ResearchMind AI workspace orchestration scripts",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "npm --prefix frontend test -- --run",
+    "test:backend": "python -m pytest backend/tests -q",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "build": "npm --prefix frontend run build"
+  }
+}
