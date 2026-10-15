@@ -115,3 +115,24 @@ curl http://127.0.0.1:8000/api/papers
 - Comparison, search, gaps, and reports are deterministic and evidence-backed.
 - OmniRush `omnirush/gpt-6-astra` is not called because the official bundled
   documentation does not verify an application-level invocation contract.
+
+## 5. 60–90 second presenter script
+
+> ResearchMind AI helps researchers move from a folder of papers to a
+> source-grounded working view. I will upload two clearly labeled synthetic
+> papers, and the dashboard immediately shows the extracted title, pages, and
+> evidence-backed fields. I select both sources to compare their objectives,
+> methods, datasets, metrics, results, and limitations side by side. Next, I
+> search for a phrase and show the exact matching passage with its source page,
+> so the result is auditable instead of a vague summary. The gap explorer then
+> surfaces only limitations and explicit open questions that are present in the
+> papers. Finally, I download a Markdown report containing the summaries,
+> comparison, candidate gaps, and page references. The key boundary is
+> intentional: this submission is deterministic and evidence-based, the
+> library is process-local, OCR is not implemented, and the OmniRush model
+> invocation contract is not verified, so the app never pretends to have used
+> an unverified model.
+
+No screenshots are committed because the available verification used the live
+local application and container smoke flow. Record the running dashboard
+locally using the sequence above if a submission portal requires screenshots.
