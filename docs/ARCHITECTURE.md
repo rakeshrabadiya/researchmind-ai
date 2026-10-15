@@ -1,6 +1,6 @@
 # ResearchMind AI architecture
 
-## Milestone 2 boundary
+## Milestone 3 boundary
 
 The current milestone preserves the first dashboard and adds one complete,
 honest PDF processing slice:
@@ -11,13 +11,20 @@ honest PDF processing slice:
    multipart form data to `POST /api/papers/upload`.
 4. FastAPI validates the bytes, extracts real text with PyMuPDF, and removes
    its temporary file.
-5. The dashboard displays extraction metadata, per-page status, evidence-backed
+5. The upload receives a process-local `paper_id` and appears in the research
+   library without persisting the PDF.
+6. The researcher can select papers, inspect/remove them, compare fields,
+   search exact passages, explore documented gaps, and download a Markdown
+   report.
+7. The dashboard displays extraction metadata, per-page status, evidence-backed
    paper fields, claims, and 1-based source pages.
-6. The FastAPI service reports readiness at `GET /api/health`.
+8. The FastAPI service reports readiness at `GET /api/health`.
 
 The backend does not persist uploaded files or send them to a model. The
-dashboard sample statistics and reading queue are intentionally static seed
-content, not claims about a connected research library.
+library stores validated metadata and extracted page text only for the current
+Python process. A restart clears it. The dashboard sample statistics and
+reading queue are intentionally static seed content, not claims about a
+connected research library.
 
 ## System shape
 
@@ -29,13 +36,15 @@ content, not claims about a connected research library.
         | frontend/                      |
         +---------------+---------------+
                         |
-                        | multipart PDF upload + validated JSON response
+                        | multipart uploads + research JSON/report responses
                         v
         +-------------------------------+
         | FastAPI + Uvicorn              |
         | backend/app/main.py           |
         | GET /api/health                |
         | POST /api/papers/upload        |
+        | GET/DELETE /api/papers         |
+        | POST /api/research/*           |
         +-------------------------------+
 
                 production container
@@ -67,9 +76,35 @@ interaction keyboard accessible and visually explicit.
 
 ### Thin API boundary
 
-The backend keeps the stable health contract and adds a bounded upload route.
-The route returns a validated JSON contract instead of storing files or
-inventing a persistence layer prematurely.
+The backend keeps the stable health contract and adds bounded upload and
+research routes. Every research route resolves explicit paper IDs through the
+in-memory library and returns validated JSON or deterministic Markdown instead
+of inventing a persistence layer prematurely.
+
+### Process-scoped library lifecycle
+
+`backend/app/library.py` stores `UploadResponse` metadata plus extracted page
+text in a thread-safe in-memory dictionary. IDs are deterministic within one
+process (`paper-0001`, `paper-0002`, ...). `GET /api/papers` lists newest first;
+`GET /api/papers/{paper_id}` exposes field-level provenance without raw page
+text; `DELETE` removes the record. No PDF path or binary is retained after the
+upload request, and all records disappear on process restart. Durable storage
+is intentionally deferred rather than implied.
+
+### Deterministic cross-paper intelligence
+
+`backend/app/intelligence.py` provides transparent operations:
+
+- Comparison copies structured values and attaches exact matched evidence.
+- Search performs bounded, case-insensitive substring matching over extracted
+  page lines/sentences and returns the source paper and 1-based page.
+- Gap exploration accepts only documented limitations, future directions, or
+  sentences with explicit open-question wording.
+- Reports are Markdown assembled from the same validated values and evidence;
+  they include an explicit no-model-generated-conclusions notice.
+
+No operation infers contradictions, citations, missing results, or scientific
+conclusions.
 
 ### Evidence-preserving extraction
 
@@ -87,7 +122,7 @@ The upload route requires a `.pdf` filename, `application/pdf` MIME type, a
 bounded chunks to a unique temporary file. The sanitized filename is display
 only, and cleanup runs in `finally`. Uploaded bytes are not logged or stored.
 
-### No model call in milestone 2
+### No model call in milestone 3
 
 The permitted model integration visible in the OmniRush runtime is
 `omnirush/gpt-6-astra`. The bundled OmniRush docs describe provider setup but
@@ -120,5 +155,6 @@ Future milestones can add the following behind explicit contracts:
 - OCR for image-only pages, with its own dependency and tests.
 - A model adapter that accepts only approved provider/model configuration.
 - Persistent research collections and user-scoped access control.
+- Cross-process job queues and larger-library search indexing.
 
 These are not implemented by the current milestone.

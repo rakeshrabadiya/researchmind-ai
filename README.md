@@ -2,10 +2,10 @@
 
 ResearchMind AI is a research workspace for turning scientific papers into
 clearer questions, evidence, and decisions. The current milestone combines a
-responsive research dashboard with real, deterministic PDF extraction and
-page-aware evidence display.
+responsive research dashboard with real, deterministic PDF extraction,
+multi-paper library intelligence, and page-aware evidence display.
 
-## Milestone 2 scope
+## Milestone 3 scope
 
 - React + TypeScript + Vite frontend with a Tailwind CSS toolchain.
 - Editorial observatory dashboard with responsive navigation, reading queue,
@@ -15,9 +15,14 @@ page-aware evidence display.
   real text with PyMuPDF, and removes the temporary file on every path.
 - Structured Pydantic paper fields use document evidence only. Missing fields
   are `Not reported`; claims include exact supporting text and 1-based pages.
+- Process-scoped in-memory paper library with list, inspect, select, and remove
+  operations.
+- Deterministic side-by-side comparison, cross-paper exact evidence search,
+  documented research-gap exploration, and downloadable Markdown reports.
 - Image-only pages are reported explicitly. OCR is not implemented.
-- No persistence, authentication, or model calls. No external generative AI
-  tool is used.
+- PDFs and extracted page text are cleared when the backend process restarts;
+  there is no persistence or authentication yet.
+- No model calls or external generative AI tool are used.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system boundary and
 next-step contracts.
@@ -90,6 +95,12 @@ The upload endpoint rejects non-PDF MIME types/extensions, invalid PDF headers,
 malformed documents, empty uploads, and files larger than 25 MiB. A valid blank
 PDF is accepted and reported as having no extracted text.
 
+Successful uploads are assigned a process-local `paper_id`. The dashboard can
+select multiple papers for comparison, search exact extracted passages, derive
+candidate gaps from documented limitations/open questions, and download a
+source-grounded Markdown report. The library is intentionally ephemeral: a
+backend restart clears it.
+
 ## Checks
 
 The canonical offline test command after dependencies are installed is:
@@ -143,6 +154,13 @@ until then, all returned analysis is deterministic and text-backed.
 | --- | --- | --- |
 | `GET` | `/api/health` | Service readiness check |
 | `POST` | `/api/papers/upload` | Validate and extract one PDF |
+| `GET` | `/api/papers` | List the current in-memory library |
+| `GET` | `/api/papers/{paper_id}` | Inspect a paper and field evidence |
+| `DELETE` | `/api/papers/{paper_id}` | Remove a paper from memory |
+| `POST` | `/api/research/compare` | Compare 2–10 selected papers |
+| `GET` | `/api/research/search?q=...` | Search exact extracted evidence |
+| `POST` | `/api/research/gaps` | Derive evidence-backed gap candidates |
+| `POST` | `/api/research/report` | Generate a deterministic Markdown report |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for response fields,
 security boundaries, and known limitations.

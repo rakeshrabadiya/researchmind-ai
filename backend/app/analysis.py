@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from .extraction import ExtractedDocument, ExtractedPage
-from .models import ImportantClaim, PaperExtraction
+from .models import EvidenceReference, ImportantClaim, PaperExtraction
 
 NOT_REPORTED = "Not reported"
 UNABLE_TO_VERIFY = "Unable to verify"
@@ -182,3 +182,86 @@ def analyze_deterministically(document: ExtractedDocument) -> PaperExtraction:
         future_research_directions=values["future_research_directions"],
         important_claims=_claims(pages),
     )
+
+
+def _reference_for_value(
+    pages: Sequence[ExtractedPage],
+    value: str,
+) -> list[EvidenceReference]:
+    """Locate a previously extracted value without inventing supporting text."""
+
+    if not value or value == NOT_REPORTED:
+        return []
+
+    exact_pages = [page.page_number for page in pages if value in page.text]
+    if exact_pages:
+        return [EvidenceReference(supporting_text=value, source_pages=exact_pages)]
+
+    # Section values can cross a PDF page boundary. Match their exact
+    # non-empty lines and retain only text that was present on a source page.
+    value_lines = [line.strip() for line in value.splitlines() if line.strip()]
+    matching_pages: list[int] = []
+    for page in pages:
+        page_lines = {line.strip() for line in page.text.splitlines() if line.strip()}
+        if value_lines and any(line in page_lines for line in value_lines):
+            matching_pages.append(page.page_number)
+    if matching_pages:
+        return [EvidenceReference(supporting_text=value, source_pages=matching_pages)]
+
+    # Fallback fields are sentence-sized and may differ only by line wrapping
+    # in extraction output. Return the exact extracted sentence when found.
+    compact_value = re.sub(r"\s+", " ", value).strip().lower()
+    for sentence, page_number in _sentences(pages):
+        if re.sub(r"\s+", " ", sentence).strip().lower() == compact_value:
+            return [EvidenceReference(supporting_text=sentence, source_pages=[page_number])]
+    return []
+
+
+def _first_page_line_reference(page: ExtractedPage, value: str) -> list[EvidenceReference]:
+    """Find title/author/year metadata on page one, preserving source text."""
+
+    if not value or value == NOT_REPORTED:
+        return []
+    target = re.sub(r"\s+", " ", value).strip().lower()
+    for raw_line in page.text.splitlines():
+        line = raw_line.strip()
+        if re.sub(r"\s+", " ", line).strip().lower() == target:
+            return [EvidenceReference(supporting_text=line, source_pages=[page.page_number])]
+    return []
+
+
+def extract_field_evidence(
+    document: ExtractedDocument,
+    paper: PaperExtraction,
+) -> dict[str, list[EvidenceReference]]:
+    """Return public provenance for every structured field.
+
+    This is intentionally a matching operation over extracted text, not a
+    second analysis pass. A field remains evidence-free when its value cannot
+    be located exactly in the source pages.
+    """
+
+    if not document.pages:
+        return {field: [] for field in paper.model_fields if field != "important_claims"}
+
+    field_values = {
+        "title": paper.title,
+        "authors": paper.authors,
+        "publication_year": paper.publication_year,
+        "abstract": paper.abstract,
+        "research_problem": paper.research_problem,
+        "objectives": paper.objectives,
+        "methodology": paper.methodology,
+        "datasets_sample_sizes": paper.datasets_sample_sizes,
+        "evaluation_metrics": paper.evaluation_metrics,
+        "reported_results": paper.reported_results,
+        "limitations": paper.limitations,
+        "future_research_directions": paper.future_research_directions,
+    }
+    result: dict[str, list[EvidenceReference]] = {}
+    for field, value in field_values.items():
+        if field in {"title", "authors", "publication_year"}:
+            result[field] = _first_page_line_reference(document.pages[0], value)
+        else:
+            result[field] = _reference_for_value(document.pages, value)
+    return result

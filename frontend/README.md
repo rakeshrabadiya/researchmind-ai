@@ -1,6 +1,6 @@
 # ResearchMind AI frontend
 
-ResearchMind is a Vite + React + TypeScript dashboard with a Tailwind CSS toolchain. The interface uses an editorial observatory visual language to keep a researcher oriented across reading stats, an active paper queue, and a PDF upload/extraction flow.
+ResearchMind is a Vite + React + TypeScript dashboard with a Tailwind CSS toolchain. The interface uses an editorial observatory visual language to keep a researcher oriented across reading stats, an in-memory multi-paper library, PDF extraction, comparison, evidence search, gap exploration, and report download.
 
 ## Requirements
 
@@ -29,12 +29,19 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 
 When `VITE_API_BASE_URL` is omitted, the browser uses the same origin. Start the FastAPI service separately when running locally.
 
+The library and intelligence actions use the backend's current process-local
+state. A backend restart clears uploaded papers; the frontend does not claim
+durable persistence.
+
 ## Test and typecheck
 
 ```bash
 npm test
 npm run typecheck
 ```
+
+The research intelligence API clients are tested with deterministic mocked HTTP
+responses; no external services are required for frontend tests.
 
 ## Production build
 

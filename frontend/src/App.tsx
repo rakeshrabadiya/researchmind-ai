@@ -1,182 +1,43 @@
-import { useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { getUploadResultState, type PaperUploadResponse, UploadApiError, uploadPaper } from './api'
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { getUploadResultState, listPapers, type PaperRecord, type PaperUploadResponse, UploadApiError, uploadPaper } from './api'
+import ResearchIntelligence from './ResearchIntelligence'
 import { validatePdf } from './uploadState'
 
-type IconName =
-  | 'arrow'
-  | 'book'
-  | 'chart'
-  | 'check'
-  | 'chevron'
-  | 'clock'
-  | 'file'
-  | 'folder'
-  | 'grid'
-  | 'help'
-  | 'spark'
-  | 'upload'
+type IconName = 'arrow' | 'book' | 'chart' | 'check' | 'chevron' | 'clock' | 'file' | 'folder' | 'grid' | 'help' | 'spark' | 'upload'
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
   const paths: Record<IconName, ReactNode> = {
-    arrow: <><path d="M5 12h13" /><path d="m13 6 6 6-6 6" /></>,
-    book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16" /><path d="M8 7h8M8 11h6" /></>,
-    chart: <><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 3-4 3 2 5-7" /><path d="M16 6h2v2" /></>,
-    check: <path d="m5 12 4 4L19 6" />,
-    chevron: <path d="m7 10 5 5 5-5" />,
-    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></>,
-    file: <><path d="M6 3.5h8l4 4V20.5H6z" /><path d="M14 3.5v4h4M9 12h6M9 15.5h5" /></>,
-    folder: <><path d="M3.5 6.5h6l1.5 2h9.5v10.5h-17z" /><path d="M3.5 6.5v-1h6l1.5 2" /></>,
-    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
-    help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.8 9a2.3 2.3 0 1 1 3.9 1.7c-.9.8-1.7 1.2-1.7 2.6M12 16.7v.1" /></>,
-    spark: <><path d="m12 3 1.2 5.8L19 10l-5.8 1.2L12 17l-1.2-5.8L5 10l5.8-1.2z" /><path d="m19 16 .5 2.5L22 19l-2.5.5L19 22l-.5-2.5L16 19l2.5-.5z" /></>,
-    upload: <><path d="M12 15V4" /><path d="m8 8 4-4 4 4" /><path d="M5 14v5h14v-5" /></>,
+    arrow: <><path d="M5 12h13" /><path d="m13 6 6 6-6 6" /></>, book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16" /><path d="M8 7h8M8 11h6" /></>, chart: <><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 3-4 3 2 5-7" /><path d="M16 6h2v2" /></>, check: <path d="m5 12 4 4L19 6" />, chevron: <path d="m7 10 5 5 5-5" />, clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></>, file: <><path d="M6 3.5h8l4 4V20.5H6z" /><path d="M14 3.5v4h4M9 12h6M9 15.5h5" /></>, folder: <><path d="M3.5 6.5h6l1.5 2h9.5v10.5h-17z" /><path d="M3.5 6.5v-1h6l1.5 2" /></>, grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>, help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.8 9a2.3 2.3 0 1 1 3.9 1.7c-.9.8-1.7 1.2-1.7 2.6M12 16.7v.1" /></>, spark: <><path d="m12 3 1.2 5.8L19 10l-5.8 1.2L12 17l-1.2-5.8L5 10l5.8-1.2z" /><path d="m19 16 .5 2.5L22 19l-2.5.5L19 22l-.5-2.5L16 19l2.5-.5z" /></>, upload: <><path d="M12 15V4" /><path d="m8 8 4-4 4 4" /><path d="M5 14v5h14v-5" /></>,
   }
   return <svg {...common}>{paths[name]}</svg>
 }
 
-const queue = [
-  { id: '01', title: 'The geometry of collective attention', authors: 'M. Chen · S. Roy', journal: 'Nature Human Behaviour', date: 'Today', tone: 'coral' },
-  { id: '02', title: 'Latent spaces as cultural archives', authors: 'A. Okafor · P. Singh', journal: 'Digital Scholarship Quarterly', date: 'Yesterday', tone: 'blue' },
-  { id: '03', title: 'A field guide to slow technology', authors: 'J. Müller', journal: 'Journal of Design History', date: '12 Oct', tone: 'gold' },
-]
-
 function Sidebar() {
-  return (
-    <aside className="sidebar" aria-label="Primary navigation">
-      <div className="brand-lockup">
-        <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
-        <span className="brand-name">Research<span>Mind</span></span>
-      </div>
-      <div className="workspace-select">
-        <div className="workspace-avatar">AS</div>
-        <div><p className="eyebrow">Workspace</p><p className="workspace-name">Attention Studies</p></div>
-        <Icon name="chevron" size={15} />
-      </div>
-      <nav className="nav-list">
-        <p className="nav-label">Navigate</p>
-        <a className="nav-item active" href="#overview"><Icon name="grid" /><span>Overview</span><span className="nav-count">8</span></a>
-        <a className="nav-item" href="#library"><Icon name="book" /><span>My library</span></a>
-        <a className="nav-item" href="#insights"><Icon name="chart" /><span>Insights</span><span className="new-dot" /></a>
-        <a className="nav-item" href="#collections"><Icon name="folder" /><span>Collections</span></a>
-      </nav>
-      <div className="sidebar-bottom">
-        <div className="weekly-card"><div className="weekly-top"><span>WEEKLY PULSE</span><Icon name="spark" size={15} /></div><strong>4<span>h</span> 26<span>m</span></strong><p>of focused reading</p><div className="pulse-track"><span /></div><div className="pulse-meta"><span>Goal 5h</span><span>85%</span></div></div>
-        <a className="help-link" href="#help"><Icon name="help" size={16} /><span>Help & shortcuts</span><span className="shortcut">?</span></a>
-        <div className="user-row"><div className="user-avatar">AR</div><div><strong>Alex Rivera</strong><span>Researcher</span></div><span className="more-dots">•••</span></div>
-      </div>
-    </aside>
-  )
+  return <aside className="sidebar" aria-label="Primary navigation"><div className="brand-lockup"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><span className="brand-name">Research<span>Mind</span></span></div><div className="workspace-select"><div className="workspace-avatar">AS</div><div><p className="eyebrow">Workspace</p><p className="workspace-name">Attention Studies</p></div><Icon name="chevron" size={15} /></div><nav className="nav-list"><p className="nav-label">Navigate</p><a className="nav-item active" href="#overview"><Icon name="grid" /><span>Overview</span><span className="nav-count">8</span></a><a className="nav-item" href="#library"><Icon name="book" /><span>My library</span></a><a className="nav-item" href="#insights"><Icon name="chart" /><span>Insights</span><span className="new-dot" /></a><a className="nav-item" href="#collections"><Icon name="folder" /><span>Collections</span></a></nav><div className="sidebar-bottom"><div className="weekly-card"><div className="weekly-top"><span>WEEKLY PULSE</span><Icon name="spark" size={15} /></div><strong>4<span>h</span> 26<span>m</span></strong><p>of focused reading</p><div className="pulse-track"><span /></div><div className="pulse-meta"><span>Goal 5h</span><span>85%</span></div></div><a className="help-link" href="#help"><Icon name="help" size={16} /><span>Help &amp; shortcuts</span><span className="shortcut">?</span></a><div className="user-row"><div className="user-avatar">AR</div><div><strong>Alex Rivera</strong><span>Researcher</span></div><span className="more-dots">•••</span></div></div></aside>
 }
-
-function StatCard({ value, label, detail, icon, accent }: { value: string; label: string; detail: string; icon: IconName; accent?: string }) {
-  return <article className={`stat-card ${accent ?? ''}`}><div className="stat-icon"><Icon name={icon} size={17} /></div><p>{label}</p><strong>{value}</strong><span>{detail}</span></article>
-}
-
-function PaperRow({ paper }: { paper: typeof queue[number] }) {
-  return <article className="paper-row"><div className={`paper-cover ${paper.tone}`}><span>{paper.id}</span><Icon name="file" size={17} /></div><div className="paper-copy"><h3>{paper.title}</h3><p>{paper.authors}</p><span>{paper.journal}</span></div><div className="paper-date"><span>{paper.date}</span><button aria-label={`Open ${paper.title}`}><Icon name="arrow" size={16} /></button></div></article>
-}
-
-type UploadStatus = 'idle' | 'processing' | 'success' | 'empty' | 'image_only' | 'error'
 
 function ExtractionResult({ response }: { response: PaperUploadResponse }) {
   const resultState = getUploadResultState(response)
   const statusLabel = resultState === 'success' ? 'TEXT EXTRACTED' : resultState === 'image_only' ? 'IMAGE-ONLY PDF' : 'NO TEXT EXTRACTED'
   const extractedPages = response.pages.filter((page) => page.text_length > 0).length
-  const reportedFields = [
-    ['Title', response.paper.title], ['Authors', response.paper.authors], ['Publication year', response.paper.publication_year],
-    ['Abstract', response.paper.abstract], ['Research problem', response.paper.research_problem], ['Objectives', response.paper.objectives],
-    ['Methodology', response.paper.methodology], ['Datasets & sample sizes', response.paper.datasets_sample_sizes], ['Evaluation metrics', response.paper.evaluation_metrics],
-    ['Reported results', response.paper.reported_results], ['Limitations', response.paper.limitations], ['Future research', response.paper.future_research_directions],
-  ].filter(([, value]) => value !== 'Not reported')
-  return <section className={`extraction-result result-${resultState}`} aria-labelledby="extraction-title">
-    <div className="result-heading"><div><p className="section-kicker">PAPER RECEIVED</p><h3 id="extraction-title">{statusLabel}</h3></div><span className="result-badge">{response.ocr_unavailable ? 'OCR unavailable' : 'validated'}</span></div>
-    <dl className="paper-metadata">
-      <div><dt>File</dt><dd>{response.filename}</dd></div>
-      <div><dt>Type</dt><dd>{response.mime_type}</dd></div>
-      <div><dt>Size</dt><dd>{(response.byte_size / 1024 / 1024).toFixed(2)} MB</dd></div>
-      <div><dt>Pages</dt><dd>{response.page_count}</dd></div>
-      <div><dt>Text pages</dt><dd>{extractedPages} / {response.page_count}</dd></div>
-      <div><dt>Characters</dt><dd>{response.extracted_text_length.toLocaleString()}</dd></div>
-    </dl>
-    {reportedFields.length > 0 && <div className="paper-fields"><p className="result-label">EVIDENCE-BACKED PAPER FIELDS</p>{reportedFields.map(([label, value]) => <div className="paper-field" key={label}><p className="paper-field-label">{label}</p><p>{value}</p></div>)}</div>}
-    <div className="page-statuses"><p className="result-label">PAGE EXTRACTION</p>{response.pages.map((page) => <details className="page-status" key={page.page_number}><summary><span>Page {page.page_number}</span><span className="page-status-value">{page.status}{page.image_only ? ' · image only' : ''} · {page.text_length.toLocaleString()} chars</span></summary></details>)}</div>
-    {response.paper.important_claims.length > 0 && <div className="claims-section"><p className="result-label">IMPORTANT CLAIMS &amp; EVIDENCE</p>{response.paper.important_claims.map((claim, index) => <article className="claim" key={`${claim.supporting_text}-${index}`}><p className="claim-text">{claim.supporting_text}</p><div className="claim-evidence">{claim.source_pages.map((page) => <span key={page}>p. {page}</span>)}</div></article>)}</div>}
-    {response.warnings.length > 0 && <div className="claims-section"><p className="result-label">PROCESSING NOTES</p>{response.warnings.map((warning) => <p className="result-note" key={warning}>{warning}</p>)}</div>}
-    {resultState === 'image_only' && <p className="result-note">This PDF contains pages that appear to be images, so no selectable text was returned.</p>}
-    {resultState === 'empty' && <p className="result-note">The paper was accepted, but no text was extracted from its pages.</p>}
-  </section>
+  const reportedFields = [['Title', response.paper.title], ['Authors', response.paper.authors], ['Publication year', response.paper.publication_year], ['Abstract', response.paper.abstract], ['Research problem', response.paper.research_problem], ['Objectives', response.paper.objectives], ['Methodology', response.paper.methodology], ['Datasets & sample sizes', response.paper.datasets_sample_sizes], ['Evaluation metrics', response.paper.evaluation_metrics], ['Reported results', response.paper.reported_results], ['Limitations', response.paper.limitations], ['Future research', response.paper.future_research_directions]].filter(([, value]) => value !== 'Not reported')
+  return <section className={`extraction-result result-${resultState}`} aria-labelledby="extraction-title"><div className="result-heading"><div><p className="section-kicker">PAPER RECEIVED</p><h3 id="extraction-title">{statusLabel}</h3></div><span className="result-badge">{response.ocr_unavailable ? 'OCR unavailable' : 'validated'}</span></div><dl className="paper-metadata"><div><dt>File</dt><dd>{response.filename}</dd></div><div><dt>Type</dt><dd>{response.mime_type}</dd></div><div><dt>Size</dt><dd>{(response.byte_size / 1024 / 1024).toFixed(2)} MB</dd></div><div><dt>Pages</dt><dd>{response.page_count}</dd></div><div><dt>Text pages</dt><dd>{extractedPages} / {response.page_count}</dd></div><div><dt>Characters</dt><dd>{response.extracted_text_length.toLocaleString()}</dd></div></dl>{reportedFields.length > 0 && <div className="paper-fields"><p className="result-label">EVIDENCE-BACKED PAPER FIELDS</p>{reportedFields.map(([label, value]) => <div className="paper-field" key={label}><p className="paper-field-label">{label}</p><p>{value}</p></div>)}</div>}<div className="page-statuses"><p className="result-label">PAGE EXTRACTION</p>{response.pages.map((page) => <details className="page-status" key={page.page_number}><summary><span>Page {page.page_number}</span><span className="page-status-value">{page.status}{page.image_only ? ' · image only' : ''} · {page.text_length.toLocaleString()} chars</span></summary></details>)}</div>{response.paper.important_claims.length > 0 && <div className="claims-section"><p className="result-label">IMPORTANT CLAIMS &amp; EVIDENCE</p>{response.paper.important_claims.map((claim, index) => <article className="claim" key={`${claim.supporting_text}-${index}`}><p className="claim-text">{claim.supporting_text}</p><div className="claim-evidence">{claim.source_pages.map((page) => <span key={page}>p. {page}</span>)}</div></article>)}</div>}{response.warnings.length > 0 && <div className="claims-section"><p className="result-label">PROCESSING NOTES</p>{response.warnings.map((warning) => <p className="result-note" key={warning}>{warning}</p>)}</div>}{resultState === 'image_only' && <p className="result-note">This PDF contains pages that appear to be images, so no selectable text was returned.</p>}{resultState === 'empty' && <p className="result-note">The paper was accepted, but no text was extracted from its pages.</p>}</section>
 }
 
-function UploadPanel() {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState('')
-  const [dragActive, setDragActive] = useState(false)
-  const [status, setStatus] = useState<UploadStatus>('idle')
-  const [response, setResponse] = useState<PaperUploadResponse | null>(null)
-
-  const handleFile = (candidate: File | null | undefined) => {
-    if (status === 'processing') return
-    const result = validatePdf(candidate)
-    if (result.valid) {
-      setFile(result.file)
-      setError('')
-      setResponse(null)
-      setStatus('idle')
-      return
-    }
-    setFile(null)
-    setResponse(null)
-    setStatus('error')
-    setError(result.message)
-  }
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setDragActive(false)
-    handleFile(event.dataTransfer.files[0])
-  }
-
-  const handleUpload = async () => {
-    if (!file || status === 'processing') return
-    setStatus('processing')
-    setError('')
-    setResponse(null)
-    try {
-      const result = await uploadPaper(file)
-      setResponse(result)
-      setStatus(getUploadResultState(result))
-    } catch (uploadError) {
-      setStatus('error')
-      setError(uploadError instanceof UploadApiError ? uploadError.message : 'The paper could not be uploaded. Please try again.')
-    }
-  }
-
-  const resetSelection = () => {
-    if (status === 'processing') return
-    setFile(null)
-    setResponse(null)
-    setStatus('idle')
-    setError('')
-    if (inputRef.current) inputRef.current.value = ''
-  }
-
+type UploadStatus = 'idle' | 'processing' | 'success' | 'empty' | 'image_only' | 'error'
+function UploadPanel({ onUploaded }: { onUploaded: (result: PaperUploadResponse) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null); const [file, setFile] = useState<File | null>(null); const [error, setError] = useState(''); const [dragActive, setDragActive] = useState(false); const [status, setStatus] = useState<UploadStatus>('idle'); const [response, setResponse] = useState<PaperUploadResponse | null>(null)
+  const handleFile = (candidate: File | null | undefined) => { if (status === 'processing') return; const result = validatePdf(candidate); if (result.valid) { setFile(result.file); setError(''); setResponse(null); setStatus('idle') } else { setFile(null); setResponse(null); setStatus('error'); setError(result.message) } }
+  const handleUpload = async () => { if (!file || status === 'processing') return; setStatus('processing'); setError(''); setResponse(null); try { const result = await uploadPaper(file); setResponse(result); setStatus(getUploadResultState(result)); onUploaded(result) } catch (cause) { setStatus('error'); setError(cause instanceof UploadApiError ? cause.message : 'The paper could not be uploaded. Please try again.') } }
+  const resetSelection = () => { if (status === 'processing') return; setFile(null); setResponse(null); setStatus('idle'); setError(''); if (inputRef.current) inputRef.current.value = '' }
   const isProcessing = status === 'processing'
-
-  return <section className={`upload-panel ${dragActive ? 'is-dragging' : ''}`} aria-labelledby="upload-title">
-    <div className="upload-heading"><div><p className="section-kicker">ADD TO THE OBSERVATORY</p><h2 id="upload-title">Bring a paper<br /><em>into focus.</em></h2></div><div className="orbit-icon" aria-hidden="true"><span className="orbit-line one" /><span className="orbit-line two" /><span className="orbit-core"><Icon name="upload" size={21} /></span></div></div>
-    <p className="upload-intro">Drop a PDF here and make it part of your active reading constellation.</p>
-    <div className={`drop-zone ${isProcessing ? 'is-processing' : ''}`} role="button" aria-disabled={isProcessing} tabIndex={isProcessing ? -1 : 0} onClick={() => { if (!isProcessing) inputRef.current?.click() }} onKeyDown={(event) => { if (!isProcessing && (event.key === 'Enter' || event.key === ' ')) inputRef.current?.click() }} onDragEnter={(event) => { if (!isProcessing) { event.preventDefault(); setDragActive(true) } }} onDragOver={(event) => { if (!isProcessing) event.preventDefault() }} onDragLeave={() => setDragActive(false)} onDrop={handleDrop}>
-      <input ref={inputRef} className="sr-only" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFile(event.target.files?.[0])} />
-      {!file ? <><div className="drop-icon"><Icon name="upload" size={21} /></div><p className="drop-title">Drop your PDF anywhere here</p><p className="drop-or">or <span>browse from your device</span></p><p className="drop-limit">PDF only · up to 25 MB</p></> : <div className="selected-file"><div className="selected-file-icon"><Icon name="file" size={20} /></div><div><p className="selected-label">{isProcessing ? 'PROCESSING' : 'READY TO REVIEW'}</p><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF document</span></div><button type="button" className="remove-file" disabled={isProcessing} aria-label="Remove selected file" onClick={(event) => { event.stopPropagation(); resetSelection() }}>×</button></div>}
-    </div>
-    {file && status !== 'success' && status !== 'empty' && status !== 'image_only' && <button type="button" className="upload-submit" disabled={isProcessing} onClick={(event) => { event.stopPropagation(); void handleUpload() }}>{isProcessing ? <><span className="loading-dot" /> Processing PDF…</> : status === 'error' ? 'Retry upload' : 'Upload & extract paper'}</button>}
-    <div className={`upload-message ${error ? 'has-error' : ''} ${isProcessing ? 'is-loading' : ''}`} aria-live="polite">{error ? <><span className="message-symbol">!</span>{error}</> : isProcessing ? <><span className="loading-dot" /> Reading pages and extracting text…</> : status === 'success' ? <><Icon name="check" size={14} /> Extraction complete. Review page evidence below.</> : status === 'image_only' ? <><span className="message-symbol">i</span>Upload complete with an image-only warning.</> : status === 'empty' ? <><span className="message-symbol">i</span>Upload complete, but no text was extracted.</> : file ? <><Icon name="check" size={14} /> File selected. Ready to send to the observatory.</> : <><Icon name="clock" size={14} /> Select a PDF to send it to the ResearchMind backend.</>}</div>
-    {response && <ExtractionResult response={response} />}
-  </section>
+  return <section className={`upload-panel ${dragActive ? 'is-dragging' : ''}`} aria-labelledby="upload-title"><div className="upload-heading"><div><p className="section-kicker">ADD TO THE OBSERVATORY</p><h2 id="upload-title">Bring a paper<br /><em>into focus.</em></h2></div><div className="orbit-icon" aria-hidden="true"><span className="orbit-line one" /><span className="orbit-line two" /><span className="orbit-core"><Icon name="upload" size={21} /></span></div></div><p className="upload-intro">Drop a PDF here and make it part of your active reading constellation.</p><div className={`drop-zone ${isProcessing ? 'is-processing' : ''}`} role="button" aria-disabled={isProcessing} tabIndex={isProcessing ? -1 : 0} onClick={() => { if (!isProcessing) inputRef.current?.click() }} onKeyDown={(event) => { if (!isProcessing && (event.key === 'Enter' || event.key === ' ')) inputRef.current?.click() }} onDragEnter={(event) => { if (!isProcessing) { event.preventDefault(); setDragActive(true) } }} onDragOver={(event) => { if (!isProcessing) event.preventDefault() }} onDragLeave={() => setDragActive(false)} onDrop={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); setDragActive(false); handleFile(event.dataTransfer.files[0]) }}><input ref={inputRef} className="sr-only" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFile(event.target.files?.[0])} />{!file ? <><div className="drop-icon"><Icon name="upload" size={21} /></div><p className="drop-title">Drop your PDF anywhere here</p><p className="drop-or">or <span>browse from your device</span></p><p className="drop-limit">PDF only · up to 25 MB</p></> : <div className="selected-file"><div className="selected-file-icon"><Icon name="file" size={20} /></div><div><p className="selected-label">{isProcessing ? 'PROCESSING' : 'READY TO REVIEW'}</p><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF document</span></div><button type="button" className="remove-file" disabled={isProcessing} aria-label="Remove selected file" onClick={(event) => { event.stopPropagation(); resetSelection() }}>×</button></div>}</div>{file && !['success', 'empty', 'image_only'].includes(status) && <button type="button" className="upload-submit" disabled={isProcessing} onClick={(event) => { event.stopPropagation(); void handleUpload() }}>{isProcessing ? <><span className="loading-dot" /> Processing PDF…</> : status === 'error' ? 'Retry upload' : 'Upload & extract paper'}</button>}<div className={`upload-message ${error ? 'has-error' : ''} ${isProcessing ? 'is-loading' : ''}`} aria-live="polite">{error ? <><span className="message-symbol">!</span>{error}</> : isProcessing ? <><span className="loading-dot" /> Reading pages and extracting text…</> : status === 'success' ? <><Icon name="check" size={14} /> Extraction complete. Added to your research library.</> : status === 'image_only' ? <><span className="message-symbol">i</span>Upload complete with an image-only warning.</> : status === 'empty' ? <><span className="message-symbol">i</span>Upload complete, but no text was extracted.</> : file ? <><Icon name="check" size={14} /> File selected. Ready to send to the observatory.</> : <><Icon name="clock" size={14} /> Select a PDF to send it to the ResearchMind backend.</>}</div>{response && <ExtractionResult response={response} />}</section>
 }
 
 export default function App() {
-  return <div className="app-shell"><Sidebar /><main className="main-content" id="overview"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Overview</strong></div><div className="topbar-actions"><button className="date-button"><Icon name="clock" size={15} /> October 2024 <Icon name="chevron" size={14} /></button><button className="icon-button" aria-label="Notifications"><span className="notification-dot" /><span className="bell-shape" /></button></div></header><div className="page-content"><section className="hero"><div><p className="section-kicker">THURSDAY · 17 OCTOBER 2024</p><h1>Good morning, <em>Alex.</em></h1><p className="hero-copy">A clear desk. A curious mind.<br />Here’s where your research stands today.</p></div><div className="hero-sun" aria-hidden="true"><div className="sun-ring ring-a" /><div className="sun-ring ring-b" /><div className="sun-dot" /><span>03<br /><small>papers in orbit</small></span></div></section><section className="stat-grid" aria-label="Research statistics"><StatCard label="Papers this month" value="24" detail="↑ 18% from September" icon="book" accent="coral-accent" /><StatCard label="Reading streak" value="12 days" detail="Your longest yet" icon="spark" accent="blue-accent" /><StatCard label="Notes captured" value="86" detail="↑ 12 this week" icon="file" accent="gold-accent" /><StatCard label="Open questions" value="09" detail="3 ready to explore" icon="help" accent="ink-accent" /></section><div className="content-grid"><UploadPanel /><section className="queue-panel" id="library"><div className="panel-heading"><div><p className="section-kicker">YOUR READING QUEUE</p><h2>In the <em>field.</em></h2></div><button className="text-button">View all <Icon name="arrow" size={15} /></button></div><div className="queue-list">{queue.map((paper) => <PaperRow key={paper.id} paper={paper} />)}</div><div className="queue-footer"><span>3 papers waiting for your attention</span><button aria-label="Add another paper"><Icon name="arrow" size={15} /></button></div></section></div><section className="quote-strip"><span className="quote-mark">“</span><p>Research is formalized curiosity.<br /><em>It is poking and prying with a purpose.</em></p><span className="quote-source">— Zora Neale Hurston</span></section></div></main></div>
+  const [library, setLibrary] = useState<PaperRecord[]>([]); const [loadError, setLoadError] = useState('')
+  useEffect(() => { let active = true; void listPapers().then((papers) => { if (active) { setLibrary(papers); setLoadError('') } }).catch((cause) => { if (active) setLoadError(cause instanceof UploadApiError ? cause.message : 'The research library could not be loaded. Uploads are still available.') }); return () => { active = false } }, [])
+  const handleUploaded = (result: PaperUploadResponse) => { const paper = { ...result, paper_id: result.paper_id ?? `local-${encodeURIComponent(result.filename)}-${result.byte_size}` } as PaperRecord; setLibrary((current) => [paper, ...current.filter((item) => item.paper_id !== paper.paper_id)]) }
+  return <div className="app-shell"><Sidebar /><main className="main-content" id="overview"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Overview</strong></div><div className="topbar-actions"><button className="date-button"><Icon name="clock" size={15} /> October 2024 <Icon name="chevron" size={14} /></button><button className="icon-button" aria-label="Notifications"><span className="notification-dot" /><span className="bell-shape" /></button></div></header><div className="page-content"><section className="hero"><div><p className="section-kicker">THURSDAY · 17 OCTOBER 2024</p><h1>Good morning, <em>Alex.</em></h1><p className="hero-copy">A clear desk. A curious mind.<br />Here’s where your research stands today.</p></div><div className="hero-sun" aria-hidden="true"><div className="sun-ring ring-a" /><div className="sun-ring ring-b" /><div className="sun-dot" /><span>03<br /><small>papers in orbit</small></span></div></section><section className="stat-grid" aria-label="Research statistics"><article className="stat-card coral-accent"><div className="stat-icon"><Icon name="book" size={17} /></div><p>Papers in library</p><strong>{library.length.toString().padStart(2, '0')}</strong><span>Current backend library</span></article><article className="stat-card blue-accent"><div className="stat-icon"><Icon name="spark" size={17} /></div><p>Reading streak</p><strong>12 days</strong><span>Your longest yet</span></article><article className="stat-card gold-accent"><div className="stat-icon"><Icon name="file" size={17} /></div><p>Evidence pages</p><strong>{library.reduce((total, paper) => total + paper.page_count, 0).toString().padStart(2, '0')}</strong><span>Across your sources</span></article><article className="stat-card ink-accent"><div className="stat-icon"><Icon name="help" size={17} /></div><p>Selected sources</p><strong>—</strong><span>Choose from your library</span></article></section><div className="content-grid"><UploadPanel onUploaded={handleUploaded} /><ResearchIntelligence library={library} setLibrary={setLibrary} loadError={loadError} /></div><div className="quote-strip"><span className="quote-mark">“</span><p>The best research tool is a <em>better question.</em></p><span className="quote-source">RESEARCHMIND · FIELD NOTE 01</span></div></div></main></div>
 }
