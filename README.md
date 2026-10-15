@@ -5,7 +5,7 @@ clearer questions, evidence, and decisions. The current milestone combines a
 responsive research dashboard with real, deterministic PDF extraction,
 multi-paper library intelligence, and page-aware evidence display.
 
-## Milestone 3 scope
+## Milestone 4 final scope
 
 - React + TypeScript + Vite frontend with a Tailwind CSS toolchain.
 - Editorial observatory dashboard with responsive navigation, reading queue,
@@ -26,6 +26,9 @@ multi-paper library intelligence, and page-aware evidence display.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system boundary and
 next-step contracts.
+
+For a reproducible end-to-end walkthrough, see
+[docs/DEMO.md](docs/DEMO.md).
 
 ## Requirements
 
@@ -147,6 +150,10 @@ model calls or assume an OpenAI-compatible endpoint.
 The backend contains a `ProviderAdapter` protocol as a blocked integration
 boundary. A future implementation must verify the supported interface first;
 until then, all returned analysis is deterministic and text-backed.
+
+This is an intentional final limitation for the current submission. There is
+no hidden fallback to another provider and no model-generated result presented
+as deterministic extraction.
 
 ## API endpoints
 

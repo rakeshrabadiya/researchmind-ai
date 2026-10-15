@@ -1,6 +1,6 @@
 # ResearchMind AI architecture
 
-## Milestone 3 boundary
+## Milestone 4 final boundary
 
 The current milestone preserves the first dashboard and adds one complete,
 honest PDF processing slice:
@@ -122,7 +122,7 @@ The upload route requires a `.pdf` filename, `application/pdf` MIME type, a
 bounded chunks to a unique temporary file. The sanitized filename is display
 only, and cleanup runs in `finally`. Uploaded bytes are not logged or stored.
 
-### No model call in milestone 3
+### No model call in milestone 4
 
 The permitted model integration visible in the OmniRush runtime is
 `omnirush/gpt-6-astra`. The bundled OmniRush docs describe provider setup but
@@ -157,4 +157,21 @@ Future milestones can add the following behind explicit contracts:
 - Persistent research collections and user-scoped access control.
 - Cross-process job queues and larger-library search indexing.
 
-These are not implemented by the current milestone.
+These are not implemented by the current submission.
+
+## Final security and operations review
+
+- Uploads require a `.pdf` filename, `application/pdf`, a `%PDF-` signature,
+  at least one page, and a 25 MiB limit.
+- Bytes are streamed to a unique temporary file and removed in `finally`;
+  sanitized filenames are display-only and never become paths.
+- PDF content is parsed as data only. Embedded actions or instructions are not
+  executed, and document text is not logged.
+- The backend does not configure permissive CORS. Local Vite requests use the
+  `/api` development proxy, and the production container serves the frontend
+  and API from one origin.
+- The container runs FastAPI as a non-root user and includes a healthcheck.
+- `.env`, virtual environments, build output, caches, and dependency folders
+  are ignored; only lockfiles and non-secret examples are tracked.
+- The paper library is process-local. A restart clears extracted metadata and
+  page text; no database or authentication is implied.
