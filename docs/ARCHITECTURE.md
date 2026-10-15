@@ -1,17 +1,21 @@
 # ResearchMind AI architecture
 
-## Milestone 1 boundary
+## Milestone 2 boundary
 
-The first milestone establishes a reproducible workspace and one complete,
-honest user slice:
+The current milestone preserves the first dashboard and adds one complete,
+honest PDF processing slice:
 
 1. A researcher opens a responsive research dashboard.
 2. They choose or drag a PDF into the upload panel.
-3. The browser validates the file type and 25 MB limit, then shows the
-   selected file in the current page session.
-4. The FastAPI service reports readiness at `GET /api/health`.
+3. The browser validates the file type and 25 MB limit, then sends it as
+   multipart form data to `POST /api/papers/upload`.
+4. FastAPI validates the bytes, extracts real text with PyMuPDF, and removes
+   its temporary file.
+5. The dashboard displays extraction metadata, per-page status, evidence-backed
+   paper fields, claims, and 1-based source pages.
+6. The FastAPI service reports readiness at `GET /api/health`.
 
-The browser does **not** upload, parse, persist, or summarize the PDF yet. The
+The backend does not persist uploaded files or send them to a model. The
 dashboard sample statistics and reading queue are intentionally static seed
 content, not claims about a connected research library.
 
@@ -25,12 +29,13 @@ content, not claims about a connected research library.
         | frontend/                      |
         +---------------+---------------+
                         |
-                        | browser-only PDF state in milestone 1
+                        | multipart PDF upload + validated JSON response
                         v
         +-------------------------------+
         | FastAPI + Uvicorn              |
         | backend/app/main.py           |
         | GET /api/health                |
+        | POST /api/papers/upload        |
         +-------------------------------+
 
                 production container
@@ -62,18 +67,39 @@ interaction keyboard accessible and visually explicit.
 
 ### Thin API boundary
 
-The backend begins with a stable health contract before adding domain storage
-or model work. This keeps deploy checks useful and gives future upload and
-analysis features a clear API home without inventing persistence prematurely.
+The backend keeps the stable health contract and adds a bounded upload route.
+The route returns a validated JSON contract instead of storing files or
+inventing a persistence layer prematurely.
 
-### No model call in milestone 1
+### Evidence-preserving extraction
+
+`backend/app/extraction.py` uses PyMuPDF to read each page's text layer. It
+never executes document content. Each page is reported as `text_extracted`,
+`empty`, or `image_only`; the latter sets `ocr_unavailable=true` and emits a
+warning. `backend/app/analysis.py` uses conservative heading and sentence
+heuristics. It copies supporting evidence and source pages; it does not infer
+facts or generate citations.
+
+### Upload safety
+
+The upload route requires a `.pdf` filename, `application/pdf` MIME type, a
+`%PDF-` header, at least one page, and a 25 MiB limit. Input is streamed in
+bounded chunks to a unique temporary file. The sanitized filename is display
+only, and cleanup runs in `finally`. Uploaded bytes are not logged or stored.
+
+### No model call in milestone 2
 
 The permitted model integration visible in the OmniRush runtime is
-`omnirush/gpt-6-astra`. It is recorded as a future adapter target only. This
-repository makes no model calls, uses no external generative AI tool, and
-requires no provider credential. The next model-related change must confirm
-the buildathon rule and add an explicit adapter plus tests before it is wired
-into a user flow.
+`omnirush/gpt-6-astra`. The bundled OmniRush docs describe provider setup but
+do not verify a callable application API, request schema, authentication
+mechanism, or response format for this service. The current runtime is signed
+out of OmniRush Cloud. The repository therefore includes only the
+`ProviderAdapter` protocol and an unconfigured implementation. No model call,
+OpenAI-compatible assumption, credential, or fabricated analysis is present.
+The reviewed OmniRush references are `cloud/get-started.mdx`,
+`cloud/share-with-your-team/managed-llm-provider.mdx`, and
+`cloud/share-with-your-team/custom-llm-provider.mdx`; they document desktop
+and Cloud provider setup rather than a callable FastAPI application interface.
 
 ### Reproducibility
 
@@ -90,9 +116,9 @@ into a user flow.
 
 Future milestones can add the following behind explicit contracts:
 
-- `POST /api/papers` for validated uploads and durable metadata.
-- A document-processing worker for text extraction and page-level provenance.
+- Durable metadata and document retention behind an explicit storage contract.
+- OCR for image-only pages, with its own dependency and tests.
 - A model adapter that accepts only approved provider/model configuration.
 - Persistent research collections and user-scoped access control.
 
-These are not implemented by the current scaffold.
+These are not implemented by the current milestone.

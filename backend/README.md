@@ -24,6 +24,24 @@ uvicorn app.main:app --reload
 
 The health check is available at `GET http://127.0.0.1:8000/api/health`.
 
+Upload one PDF with:
+
+```bash
+curl -F "file=@paper.pdf;type=application/pdf" http://127.0.0.1:8000/api/papers/upload
+```
+
+Uploads must have a `.pdf` filename, `application/pdf` MIME type, a `%PDF-`
+magic header, at least one page, and be no larger than 25 MiB. The service
+copies each request to a unique temporary file, extracts text locally with
+PyMuPDF, and removes the file in all paths. Image-only pages are reported with
+an OCR-unavailable warning; OCR is not included in this milestone.
+
+The structured `paper` response is conservative and evidence-preserving:
+missing fields are `Not reported`, and important claims contain exact
+supporting text plus 1-based source pages. `app.analysis.ProviderAdapter` is a
+future provider protocol. Its default adapter is intentionally unconfigured;
+no AI/model calls or model-specific API assumptions are made.
+
 ## Test
 
 Run the test suite from `backend/`:

@@ -3,8 +3,11 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .routes import router as paper_router
+
 
 app = FastAPI(title="ResearchMind API")
+app.include_router(paper_router)
 
 
 @app.get("/api/health")

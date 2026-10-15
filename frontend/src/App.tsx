@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { getUploadResultState, type PaperUploadResponse, UploadApiError, uploadPaper } from './api'
 import { validatePdf } from './uploadState'
 
 type IconName =
@@ -76,20 +77,58 @@ function PaperRow({ paper }: { paper: typeof queue[number] }) {
   return <article className="paper-row"><div className={`paper-cover ${paper.tone}`}><span>{paper.id}</span><Icon name="file" size={17} /></div><div className="paper-copy"><h3>{paper.title}</h3><p>{paper.authors}</p><span>{paper.journal}</span></div><div className="paper-date"><span>{paper.date}</span><button aria-label={`Open ${paper.title}`}><Icon name="arrow" size={16} /></button></div></article>
 }
 
+type UploadStatus = 'idle' | 'processing' | 'success' | 'empty' | 'image_only' | 'error'
+
+function ExtractionResult({ response }: { response: PaperUploadResponse }) {
+  const resultState = getUploadResultState(response)
+  const statusLabel = resultState === 'success' ? 'TEXT EXTRACTED' : resultState === 'image_only' ? 'IMAGE-ONLY PDF' : 'NO TEXT EXTRACTED'
+  const extractedPages = response.pages.filter((page) => page.text_length > 0).length
+  const reportedFields = [
+    ['Title', response.paper.title], ['Authors', response.paper.authors], ['Publication year', response.paper.publication_year],
+    ['Abstract', response.paper.abstract], ['Research problem', response.paper.research_problem], ['Objectives', response.paper.objectives],
+    ['Methodology', response.paper.methodology], ['Datasets & sample sizes', response.paper.datasets_sample_sizes], ['Evaluation metrics', response.paper.evaluation_metrics],
+    ['Reported results', response.paper.reported_results], ['Limitations', response.paper.limitations], ['Future research', response.paper.future_research_directions],
+  ].filter(([, value]) => value !== 'Not reported')
+  return <section className={`extraction-result result-${resultState}`} aria-labelledby="extraction-title">
+    <div className="result-heading"><div><p className="section-kicker">PAPER RECEIVED</p><h3 id="extraction-title">{statusLabel}</h3></div><span className="result-badge">{response.ocr_unavailable ? 'OCR unavailable' : 'validated'}</span></div>
+    <dl className="paper-metadata">
+      <div><dt>File</dt><dd>{response.filename}</dd></div>
+      <div><dt>Type</dt><dd>{response.mime_type}</dd></div>
+      <div><dt>Size</dt><dd>{(response.byte_size / 1024 / 1024).toFixed(2)} MB</dd></div>
+      <div><dt>Pages</dt><dd>{response.page_count}</dd></div>
+      <div><dt>Text pages</dt><dd>{extractedPages} / {response.page_count}</dd></div>
+      <div><dt>Characters</dt><dd>{response.extracted_text_length.toLocaleString()}</dd></div>
+    </dl>
+    {reportedFields.length > 0 && <div className="paper-fields"><p className="result-label">EVIDENCE-BACKED PAPER FIELDS</p>{reportedFields.map(([label, value]) => <div className="paper-field" key={label}><p className="paper-field-label">{label}</p><p>{value}</p></div>)}</div>}
+    <div className="page-statuses"><p className="result-label">PAGE EXTRACTION</p>{response.pages.map((page) => <details className="page-status" key={page.page_number}><summary><span>Page {page.page_number}</span><span className="page-status-value">{page.status}{page.image_only ? ' · image only' : ''} · {page.text_length.toLocaleString()} chars</span></summary></details>)}</div>
+    {response.paper.important_claims.length > 0 && <div className="claims-section"><p className="result-label">IMPORTANT CLAIMS &amp; EVIDENCE</p>{response.paper.important_claims.map((claim, index) => <article className="claim" key={`${claim.supporting_text}-${index}`}><p className="claim-text">{claim.supporting_text}</p><div className="claim-evidence">{claim.source_pages.map((page) => <span key={page}>p. {page}</span>)}</div></article>)}</div>}
+    {response.warnings.length > 0 && <div className="claims-section"><p className="result-label">PROCESSING NOTES</p>{response.warnings.map((warning) => <p className="result-note" key={warning}>{warning}</p>)}</div>}
+    {resultState === 'image_only' && <p className="result-note">This PDF contains pages that appear to be images, so no selectable text was returned.</p>}
+    {resultState === 'empty' && <p className="result-note">The paper was accepted, but no text was extracted from its pages.</p>}
+  </section>
+}
+
 function UploadPanel() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
   const [dragActive, setDragActive] = useState(false)
+  const [status, setStatus] = useState<UploadStatus>('idle')
+  const [response, setResponse] = useState<PaperUploadResponse | null>(null)
 
   const handleFile = (candidate: File | null | undefined) => {
+    if (status === 'processing') return
     const result = validatePdf(candidate)
     if (result.valid) {
       setFile(result.file)
       setError('')
+      setResponse(null)
+      setStatus('idle')
       return
     }
     setFile(null)
+    setResponse(null)
+    setStatus('error')
     setError(result.message)
   }
 
@@ -99,14 +138,42 @@ function UploadPanel() {
     handleFile(event.dataTransfer.files[0])
   }
 
+  const handleUpload = async () => {
+    if (!file || status === 'processing') return
+    setStatus('processing')
+    setError('')
+    setResponse(null)
+    try {
+      const result = await uploadPaper(file)
+      setResponse(result)
+      setStatus(getUploadResultState(result))
+    } catch (uploadError) {
+      setStatus('error')
+      setError(uploadError instanceof UploadApiError ? uploadError.message : 'The paper could not be uploaded. Please try again.')
+    }
+  }
+
+  const resetSelection = () => {
+    if (status === 'processing') return
+    setFile(null)
+    setResponse(null)
+    setStatus('idle')
+    setError('')
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const isProcessing = status === 'processing'
+
   return <section className={`upload-panel ${dragActive ? 'is-dragging' : ''}`} aria-labelledby="upload-title">
     <div className="upload-heading"><div><p className="section-kicker">ADD TO THE OBSERVATORY</p><h2 id="upload-title">Bring a paper<br /><em>into focus.</em></h2></div><div className="orbit-icon" aria-hidden="true"><span className="orbit-line one" /><span className="orbit-line two" /><span className="orbit-core"><Icon name="upload" size={21} /></span></div></div>
     <p className="upload-intro">Drop a PDF here and make it part of your active reading constellation.</p>
-    <div className="drop-zone" role="button" tabIndex={0} onClick={() => inputRef.current?.click()} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click() }} onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragActive(false)} onDrop={handleDrop}>
+    <div className={`drop-zone ${isProcessing ? 'is-processing' : ''}`} role="button" aria-disabled={isProcessing} tabIndex={isProcessing ? -1 : 0} onClick={() => { if (!isProcessing) inputRef.current?.click() }} onKeyDown={(event) => { if (!isProcessing && (event.key === 'Enter' || event.key === ' ')) inputRef.current?.click() }} onDragEnter={(event) => { if (!isProcessing) { event.preventDefault(); setDragActive(true) } }} onDragOver={(event) => { if (!isProcessing) event.preventDefault() }} onDragLeave={() => setDragActive(false)} onDrop={handleDrop}>
       <input ref={inputRef} className="sr-only" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFile(event.target.files?.[0])} />
-      {!file ? <><div className="drop-icon"><Icon name="upload" size={21} /></div><p className="drop-title">Drop your PDF anywhere here</p><p className="drop-or">or <span>browse from your device</span></p><p className="drop-limit">PDF only · up to 25 MB</p></> : <div className="selected-file"><div className="selected-file-icon"><Icon name="file" size={20} /></div><div><p className="selected-label">READY TO REVIEW</p><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF document</span></div><button type="button" className="remove-file" aria-label="Remove selected file" onClick={(event) => { event.stopPropagation(); setFile(null); if (inputRef.current) inputRef.current.value = '' }}>×</button></div>}
+      {!file ? <><div className="drop-icon"><Icon name="upload" size={21} /></div><p className="drop-title">Drop your PDF anywhere here</p><p className="drop-or">or <span>browse from your device</span></p><p className="drop-limit">PDF only · up to 25 MB</p></> : <div className="selected-file"><div className="selected-file-icon"><Icon name="file" size={20} /></div><div><p className="selected-label">{isProcessing ? 'PROCESSING' : 'READY TO REVIEW'}</p><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF document</span></div><button type="button" className="remove-file" disabled={isProcessing} aria-label="Remove selected file" onClick={(event) => { event.stopPropagation(); resetSelection() }}>×</button></div>}
     </div>
-    <div className={`upload-message ${error ? 'has-error' : ''}`} aria-live="polite">{error ? <><span className="message-symbol">!</span>{error}</> : file ? <><Icon name="check" size={14} /> File selected. Ready for your front-end preview.</> : <><Icon name="clock" size={14} /> Files stay in this page for now · no server upload connected</>}</div>
+    {file && status !== 'success' && status !== 'empty' && status !== 'image_only' && <button type="button" className="upload-submit" disabled={isProcessing} onClick={(event) => { event.stopPropagation(); void handleUpload() }}>{isProcessing ? <><span className="loading-dot" /> Processing PDF…</> : status === 'error' ? 'Retry upload' : 'Upload & extract paper'}</button>}
+    <div className={`upload-message ${error ? 'has-error' : ''} ${isProcessing ? 'is-loading' : ''}`} aria-live="polite">{error ? <><span className="message-symbol">!</span>{error}</> : isProcessing ? <><span className="loading-dot" /> Reading pages and extracting text…</> : status === 'success' ? <><Icon name="check" size={14} /> Extraction complete. Review page evidence below.</> : status === 'image_only' ? <><span className="message-symbol">i</span>Upload complete with an image-only warning.</> : status === 'empty' ? <><span className="message-symbol">i</span>Upload complete, but no text was extracted.</> : file ? <><Icon name="check" size={14} /> File selected. Ready to send to the observatory.</> : <><Icon name="clock" size={14} /> Select a PDF to send it to the ResearchMind backend.</>}</div>
+    {response && <ExtractionResult response={response} />}
   </section>
 }
 
